@@ -60,7 +60,7 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
                     <span style={{ fontWeight: 600, fontSize: '16px' }}>Mm</span>
                 </div>   */}
             
-                <Image src="/logo-main.png" alt="Bprolive Dashboard" width={180} height={100} priority />
+                <Image src="/logo-main.png" alt="Bprolive Dashboard" width={180} height={120} priority />
             </Link>
 
             <button ref={menubuttonRef} type="button" className="p-link layout-menu-button layout-topbar-button" onClick={onMenuToggle}>
