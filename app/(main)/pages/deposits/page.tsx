@@ -1,0 +1,355 @@
+'use client';
+import { FilterMatchMode, FilterOperator } from 'primereact/api';
+import { Button } from 'primereact/button';
+import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions } from 'primereact/column';
+import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
+import { InputText } from 'primereact/inputtext';
+import { classNames } from 'primereact/utils';
+import React, { useEffect, useState, useContext } from 'react';
+import { listenDepositOrdersPending, OrderType, updateOrderStatusDeposit } from '@/firebaseUtils';
+import { Dropdown } from 'primereact/dropdown';
+import { Dialog } from 'primereact/dialog';
+import { LayoutContext } from '@/layout/context/layoutcontext';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { ref, getBlob } from 'firebase/storage';
+import { storage } from '@/firebase';
+
+interface UserType {
+    uid: string;
+    email: string;
+    displayName: string;
+    isAccepted: boolean;
+    createdAt: string;
+    isAdmin: boolean;
+    phoneNumber: string;
+    bpUsername: string;
+}
+
+const Deposits = () => {
+    const [deposits, setDeposits] = useState<OrderType[]>([]);
+    const { layoutConfig } = useContext(LayoutContext);
+    const [users, setUsers] = useState<Map<string, UserType>>(new Map());
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState<DataTableFilterMeta>({});
+    const [globalFilterValue, setGlobalFilterValue] = useState('');
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [isDialogVisible, setIsDialogVisible] = useState(false);
+    const [selectedStatus, setSelectedStatus] = useState<string>('pending');
+
+    const clearFilter = () => {
+        initFilters();
+    };
+
+    const onGlobalFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        let _filters = { ...filters };
+        (_filters['global'] as any).value = value;
+
+        setFilters(_filters);
+        setGlobalFilterValue(value);
+    };
+
+    const renderHeader = () => {
+        return (
+            <div className="responsive-flex" style={{ marginBottom: '1.5rem' }}>
+                <div className="flex gap-2 align-items-center">
+                    {/* <label className="font-semibold">Status:</label>
+                    <Dropdown
+                        value={selectedStatus}
+                        options={[
+                            { label: 'All', value: '' },
+                            { label: 'Pending', value: 'pending' },
+                            { label: 'Approved', value: 'approved' },
+                            { label: 'Rejected', value: 'rejected' }
+                        ]}
+                        onChange={(e) => setSelectedStatus(e.value)}
+                        placeholder="Select Status"
+                        className="w-full md:w-14rem"
+                    /> */}
+                </div>
+                <div className="flex gap-2 align-items-center">
+                    <Button type="button" icon="pi pi-filter-slash" label="Clear" className="hidden sm:flex" outlined onClick={clearFilter} />
+                    <span className="p-input-icon-left">
+                        <i className="pi pi-search" />
+                        <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Search..." />
+                    </span>
+                </div>
+            </div>
+        );
+    };
+
+    const initFilters = () => {
+        setFilters({
+            global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+            displayName: {
+                operator: FilterOperator.AND,
+                constraints: [{ value: null, matchMode: FilterMatchMode.STARTS_WITH }]
+            },
+            phoneNumber: {
+                operator: FilterOperator.AND,
+                constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }]
+            },
+            amount: {
+                operator: FilterOperator.AND,
+                constraints: [{ value: null, matchMode: FilterMatchMode.EQUALS }]
+            },
+            status: {
+                operator: FilterOperator.OR,
+                constraints: [{ value: null, matchMode: FilterMatchMode.EQUALS }]
+            }
+        });
+        setGlobalFilterValue('');
+    };
+
+    const formatDate = (dateString: string) => {
+        if (!dateString) return '';
+        return new Date(dateString).toLocaleDateString('en-US', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'PKR'
+        }).format(value);
+    };
+
+    const imageBodyTemplate = (rowData: OrderType) => {
+        return (
+            <div className="flex gap-2">
+                <a
+                    onClick={() => {
+                        setSelectedImage(rowData.screenshot);
+                        setIsDialogVisible(true);
+                    }}
+                    className="cursor-pointer text-primary"
+                >
+                    View
+                </a>
+                <a onClick={() => handleDownload(rowData.screenshot)} className="cursor-pointer">
+                    Download
+                </a>
+            </div>
+        );
+    };
+
+    console.log('seletedImage', selectedImage);
+    const handleDownload = (dataUrl: string) => {
+        try {
+            const link = document.createElement('a');
+            link.href = dataUrl;
+
+            // Detect image type
+            let extension = 'jpg';
+            if (dataUrl.startsWith('data:image/png')) extension = 'png';
+            if (dataUrl.startsWith('data:image/webp')) extension = 'webp';
+
+            link.download = `deposit.${extension}`;
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const actionBodyTemplate = (rowData: OrderType) => {
+        const isApprovalPending = rowData.status === 'pending';
+        return (
+            <div className="flex gap-2">
+                <Button label="Approve" icon="pi pi-check" className="p-button-rounded p-button-success p-button-sm" onClick={() => handleApprove(rowData)} disabled={!isApprovalPending} />
+                <Button label="Reject" icon="pi pi-times" className="p-button-rounded p-button-danger p-button-sm" onClick={() => handleReject(rowData)} disabled={!isApprovalPending} />
+            </div>
+        );
+    };
+
+    const statusBodyTemplate = (rowData: OrderType) => {
+        const statusClasses: Record<string, string> = {
+            pending: 'bg-yellow-100 text-yellow-800',
+            approved: 'bg-green-100 text-green-800',
+            rejected: 'bg-red-100 text-red-800'
+        };
+
+        return <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusClasses[rowData.status] || 'bg-gray-100'}`}>{rowData.status?.charAt(0).toUpperCase() + rowData.status?.slice(1) || 'Unknown'}</span>;
+    };
+
+    const amountBodyTemplate = (rowData: OrderType) => {
+        return formatCurrency(rowData.amount);
+    };
+
+    useEffect(() => {
+        setLoading(true);
+
+        const unsubscribe = listenDepositOrdersPending((depositsList) => {
+            setDeposits(depositsList);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        initFilters();
+    }, []);
+
+    const handleApprove = async (order: OrderType) => {
+        try {
+            await updateOrderStatusDeposit(order.uid, order.id, 'approved');
+        } catch (error) {
+            console.error('Error approving order:', error);
+        }
+    };
+
+    const handleReject = async (order: OrderType) => {
+        try {
+            await updateOrderStatusDeposit(order.uid, order.id, 'rejected');
+        } catch (error) {
+            console.error('Error rejecting order:', error);
+        }
+    };
+
+    const header = renderHeader();
+
+    if (loading) return <LoadingSpinner text="Loading deposits..." fullPage />;
+
+    const getTime = (value: any): number => {
+        if (!value) return 0;
+        if (typeof value?.toDate === 'function') return value.toDate().getTime();
+        if (typeof value?.seconds === 'number') return value.seconds * 1000;
+        const t = new Date(value).getTime();
+        return isNaN(t) ? 0 : t;
+    };
+
+    const filteredDeposits = (selectedStatus ? deposits.filter((d) => d.status === selectedStatus) : deposits).sort((a, b) => getTime(b.createdAt) - getTime(a.createdAt));
+
+    console.log('filteredDeposits', filteredDeposits);
+    console.log('deposits', deposits);
+
+    return (
+        <div className="grid">
+            <div className="col-12">
+                <div className="card">
+                    <h5 className="mb-4 text-2xl font-bold">PENDING DEPOSITS</h5>
+                    {header}
+                    <DataTable
+                        value={filteredDeposits}
+                        paginator
+                        className={`p-datatable-gridlines ${layoutConfig.colorScheme === 'dark' ? 'custom-dark-table' : 'custom-light-table'}`}
+                        showGridlines
+                        rows={25}
+                        rowsPerPageOptions={[10, 25, 50, 100]}
+                        dataKey="id"
+                        filters={filters}
+                        filterDisplay="menu"
+                        loading={loading}
+                        responsiveLayout="scroll"
+                        emptyMessage="No deposits found."
+                        scrollable
+                        scrollHeight="60vh"
+                        sortField="createdAt"
+                        sortOrder={-1}
+                        removableSort={false}
+                    >
+                        <Column
+                            field="createdAt"
+                            header="Date & Time"
+                            body={(rowData) => formatDate(rowData.createdAt)}
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '12rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="userName"
+                            header="Customer Name"
+                            filterPlaceholder="Search by name"
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '12rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="accountNumber"
+                            header="Phone"
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '12rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="amount"
+                            header="Amount"
+                            body={amountBodyTemplate}
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '10rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="bpPassword"
+                            header="BP Username"
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '12rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="screenshot"
+                            header="Attachment"
+                            body={imageBodyTemplate}
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '10rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            field="status"
+                            header="Status"
+                            body={statusBodyTemplate}
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '10rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                        <Column
+                            header="Action"
+                            body={actionBodyTemplate}
+                            style={{
+                                backgroundColor: layoutConfig.colorScheme === 'dark' ? '#2A323D' : '#ffffff',
+                                color: layoutConfig.colorScheme === 'dark' ? '#ffffff' : '#000000',
+                                minWidth: '16rem'
+                            }}
+                            className="border-b-2 border-gray-500"
+                        />
+                    </DataTable>
+
+                    <Dialog header="Deposit Screenshot" visible={isDialogVisible} style={{ width: '50vw' }} modal onHide={() => setIsDialogVisible(false)}>
+                        {selectedImage && <img src={selectedImage} alt="Deposit Screenshot" className="w-full h-[30vh] object-contain rounded-md" />}
+                    </Dialog>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Deposits;

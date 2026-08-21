@@ -1,0 +1,99 @@
+/* Override PrimeReact DataTable header and body styles */
+.p-datatable .p-datatable-thead > tr > th {
+    background-color: white !important; /* White header */
+    color: black; /* Text color */
+    border: none !important; /* Remove default borders */
+    border-bottom: 1px solid #FFFF !important; /* Column border */
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+    background-color: white; /* White cells */
+    color: black; /* Text color */
+    border: none; /* Remove default row borders */
+    border-bottom: 1px solid #FFFF; /* Column border */
+}
+
+/* Remove hover background if desired */
+.p-datatable .p-datatable-tbody > tr:hover > td {
+    background-color: #f9f9f9; /* subtle hover, or white */
+}
+
+/* Remove last column border */
+.p-datatable .p-datatable-tbody > tr > td:last-child,
+.p-datatable .p-datatable-thead > tr > th:last-child {
+
+}
+
+/* Remove scrollbar arrows but keep scrollbar */
+
+/* Chrome, Edge, Safari */
+/* GLOBAL: Remove scrollbar arrows but keep scrollbar */
+
+/* Chrome, Edge, Safari */
+/* Works for Chrome, Edge, Safari */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Works for Firefox */
+* {
+    scrollbar-width: none;
+}
+
+/* Works for IE/Edge (old) */
+* {
+    -ms-overflow-style: none;
+}
+
+/* Hide PrimeReact DataTable vertical scroll buttons */
+.p-datatable-scrollable-body {
+    overflow: auto;
+}
+
+/* Hide scrollbar */
+.p-datatable-scrollable-body::-webkit-scrollbar {
+    display: none;
+}
+
+.p-datatable-scrollable-body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+
+.responsive-flex {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+
+  @media (min-width: 640px) {
+    // still column on sm
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    // switch to row only on md+
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Dark Mode */
+.custom-dark-table .p-datatable-thead > tr > th {
+  background-color: #2A323D !important;
+  color: #ffffff !important;
+  border-color: #3f4a5a !important;
+}
+
+/* Light Mode */
+.custom-light-table .p-datatable-thead > tr > th {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+
