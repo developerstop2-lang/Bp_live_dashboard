@@ -259,12 +259,11 @@ const Dashboard = () => {
 
         try {
             const types: ('deposits' | 'withdrawals')[] = ['deposits', 'withdrawals'];
-            const startOfWeek = new Date();
-            const day = startOfWeek.getDay();
-            const diff = day === 0 ? 6 : day - 1;
 
-            startOfWeek.setDate(startOfWeek.getDate() - diff);
-            startOfWeek.setHours(0, 0, 0, 0);
+            // Target the exact start of TODAY (midnight)
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            // Anything less than startOfToday is yesterday or older!
 
             let deletedCount = 0;
 
@@ -274,13 +273,15 @@ const Dashboard = () => {
                 if (!snapshot.exists()) continue;
 
                 const data = snapshot.val();
+                console.log(`Fetched ${type} data:`, data);
                 const promises: Promise<void>[] = [];
 
                 Object.entries(data).forEach(([uid, orders]: [string, any]) => {
                     Object.entries(orders).forEach(([orderId, order]: [string, any]) => {
                         const orderDate = new Date(order.updatedAt ?? order.createdAt);
 
-                        if (orderDate < startOfWeek) {
+                
+                        if (orderDate < startOfToday) {
                             deletedCount++;
                             promises.push(remove(ref(db, `${type}/${uid}/${orderId}`)));
                         }
