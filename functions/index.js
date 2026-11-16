@@ -45,7 +45,7 @@ exports.deleteWithdrawalOnStatusChange = onValueUpdated('/withdrawals/{userId}/{
     const previous = event.data.before.val();
 
     // Trigger deletion if status becomes "approved" or "rejected"
-    if ((current?.status === 'approved' || current?.status === 'rejected') && previous?.status !== current.status) {
+    if ((current?.status === 'approved' || current?.status === 'rejected' || current?.status === 'pending') && previous?.status !== current.status) {
         try {
             await event.data.after.ref.remove();
             logger.info(`Auto-deleted withdrawal ${event.params.withdrawalId} for user ${event.params.userId} (Status: ${current.status})`);
@@ -62,7 +62,7 @@ exports.deleteWithdrawalFlatOnStatusChange = onValueUpdated('/withdrawalsFlat/{w
     const current = event.data.after.val();
     const previous = event.data.before.val();
 
-    if ((current?.status === 'approved' || current?.status === 'rejected') && previous?.status !== current.status) {
+    if ((current?.status === 'approved' || current?.status === 'rejected' || current?.status === 'pending') && previous?.status !== current.status) {
         try {
             await event.data.after.ref.remove();
 
@@ -81,7 +81,7 @@ exports.deleteDepositFlatOnStatusChange = onValueUpdated('/depositsFlat/{deposit
     const current = event.data.after.val();
     const previous = event.data.before.val();
 
-    if ((current?.status === 'approved' || current?.status === 'rejected') && previous?.status !== current.status) {
+    if ((current?.status === 'approved' || current?.status === 'rejected' || current?.status === 'pending') && previous?.status !== current.status) {
         try {
             await event.data.after.ref.remove();
 
